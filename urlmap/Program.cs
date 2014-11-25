@@ -76,7 +76,11 @@ namespace urlmap
                 path = path.Substring(0, path.IndexOf('?'));
             }
 
-            path = path.EndsWith("/") ? path : path + '/'; // add trailing slash
+            // add trailing slash
+            if (!path.EndsWith("/") && !path.Contains('#'))
+            {
+                path = path + '/';
+            }
 
             return WebUtility.UrlDecode(path);
         }
