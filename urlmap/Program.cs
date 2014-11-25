@@ -28,22 +28,28 @@ namespace urlmap
 
             var txtPath = args[0];
             var mapName = Path.GetFileNameWithoutExtension(txtPath);
-            var urlMap = File.ReadAllLines(args[0])
+            var lines = File.ReadAllLines(args[0])
                 .Where(line => line.Contains('/')) // skip header
-                .Select(line => new
+                .ToList();
+            Stats.LineCount = lines.Count;
+
+            var urlMap = lines.Select(line => new Redirect
                 {
-                    From = ExtractPath(line.Split(null).First()),
-                    To = ExtractPath(line.Split(null).Last()),
+                    From = ExtractPath(line.Split('\t').First()),
+                    To = ExtractPath(line.Split('\t').Last()),
                     Line = line
                 })
-                // remove 'from' == 'to' duplicates
-                .Where(redirect => string.Compare(redirect.From, redirect.To, StringComparison.OrdinalIgnoreCase) != 0)
-                // distinct by 'from' url path
-                .GroupBy(redirect => redirect.From.ToLower())
-                .Select(group => group.First())
+                .FilterDuplicates()
+                .DistinctByFrom()
                 .ToList();
+            Stats.UniqueCount = urlMap.Count;
 
-            Console.WriteLine("Found {0} unique urls. Processing...", urlMap.Count);
+            Console.WriteLine("----------------STATS---------------");
+            Console.WriteLine("LINES: " + Stats.LineCount);
+            Console.WriteLine("DUPLICATES: " + Stats.DuplicateCount);
+            Console.WriteLine("REPEATS: " + Stats.RepeatCount);
+            Console.WriteLine("OK: " + Stats.UniqueCount);
+            Console.WriteLine("------------------------------------");
 
             var xmlMapCol = new XElement("rewriteMap",
                 new XAttribute("name", mapName)
@@ -68,21 +74,80 @@ namespace urlmap
         private static string ExtractPath(string url)
         {
             var urlObject = new Uri(url, UriKind.RelativeOrAbsolute);
-            var path = urlObject.IsAbsoluteUri ? urlObject.AbsolutePath : urlObject.ToString();
+            var path = urlObject.ToString();
 
-            // remove query string
-            if (path.Contains('?'))
+            if (urlObject.IsAbsoluteUri)
             {
-                path = path.Substring(0, path.IndexOf('?'));
+                var server = urlObject.GetComponents(UriComponents.SchemeAndServer, UriFormat.Unescaped);
+                path = path.Replace(server, "");
             }
 
             // add trailing slash
-            if (!path.EndsWith("/") && !path.Contains('#'))
+            if (!path.EndsWith("/") && !path.Contains('#') && !path.Contains('?'))
             {
                 path = path + '/';
             }
 
             return WebUtility.UrlDecode(path);
+        }
+    }
+
+    public class Redirect
+    {
+        public string From { get; set; }
+
+        public string To { get; set; }
+
+        public string Line { get; set; }
+    }
+
+    public static class Stats
+    {
+        public static int LineCount { get; set; }
+
+        public static int UniqueCount { get; set; }
+
+        public static int DuplicateCount { get; set; }
+
+        public static int RepeatCount { get; set; }
+    }
+
+    static class Extensions
+    {
+        // remove 'from' == 'to' duplicates
+        public static IEnumerable<Redirect> FilterDuplicates(this IEnumerable<Redirect> redirects)
+        {
+            return redirects.Where(redirect =>
+            {
+                var ok = string.Compare(redirect.From, redirect.To, StringComparison.OrdinalIgnoreCase) != 0;
+
+                if (!ok)
+                {
+                    Console.WriteLine("DUPLICATE: {0} --> {1}", redirect.From, redirect.To);
+                    Stats.DuplicateCount++;
+                }
+
+                return ok;
+            });
+        }
+
+        // distinct by 'from' url path
+        public static IEnumerable<Redirect> DistinctByFrom(this IEnumerable<Redirect> redirects)
+        {
+            return redirects.GroupBy(redirect => redirect.From.ToLower())
+                .Select(group =>
+                {
+                    var unique = group.First();
+                    var repeated = group.Count() - 1;
+
+                    if (repeated > 0)
+                    {
+                        Console.WriteLine("REPEAT ({0}): {1} --> {2}", repeated, unique.From, unique.To);
+                        Stats.RepeatCount += repeated;
+                    }
+
+                    return unique;
+                });
         }
     }
 }
