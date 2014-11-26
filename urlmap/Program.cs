@@ -37,7 +37,7 @@ namespace urlmap
             var urlMap = lines.Select(line => new Redirect
                 {
                     From = ExtractPath(line.Split('\t').First()),
-                    To = ExtractPath(line.Split('\t').Last(), encodeQs: true),
+                    To = ExtractPath(line.Split('\t').Last()),
                     Line = line
                 })
                 .FilterDuplicates()
@@ -72,7 +72,7 @@ namespace urlmap
             Console.WriteLine("OK! \"RewriteMaps.config\" created successfully.");
         }
 
-        private static string ExtractPath(string url, bool encodeQs = false)
+        private static string ExtractPath(string url)
         {
             var urlObject = new Uri(url, UriKind.RelativeOrAbsolute);
             var path = urlObject.ToString();
@@ -90,7 +90,7 @@ namespace urlmap
             }
 
             // encode query string
-            if (encodeQs && path.Contains('?'))
+            if (path.Contains('?'))
             {
                 var query = path.Substring(path.IndexOf('?') + 1);
                 var pathWithoutQs = path.Substring(0, path.IndexOf('?') + 1);
