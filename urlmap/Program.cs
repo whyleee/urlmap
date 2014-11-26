@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using System.Web;
 using System.Xml.Linq;
 
 namespace urlmap
@@ -36,7 +37,7 @@ namespace urlmap
             var urlMap = lines.Select(line => new Redirect
                 {
                     From = ExtractPath(line.Split('\t').First()),
-                    To = ExtractPath(line.Split('\t').Last()),
+                    To = ExtractPath(line.Split('\t').Last(), encodeQs: true),
                     Line = line
                 })
                 .FilterDuplicates()
@@ -71,7 +72,7 @@ namespace urlmap
             Console.WriteLine("OK! \"RewriteMaps.config\" created successfully.");
         }
 
-        private static string ExtractPath(string url)
+        private static string ExtractPath(string url, bool encodeQs = false)
         {
             var urlObject = new Uri(url, UriKind.RelativeOrAbsolute);
             var path = urlObject.ToString();
@@ -86,6 +87,28 @@ namespace urlmap
             if (!path.EndsWith("/") && !path.Contains('#') && !path.Contains('?'))
             {
                 path = path + '/';
+            }
+
+            // encode query string
+            if (encodeQs && path.Contains('?'))
+            {
+                var query = path.Substring(path.IndexOf('?') + 1);
+                var pathWithoutQs = path.Substring(0, path.IndexOf('?') + 1);
+
+                var qs = HttpUtility.ParseQueryString(query);
+                var encodedQuery = "";
+
+                foreach (string q in qs)
+                {
+                    encodedQuery += string.Format("{0}={1}&", q, Uri.EscapeUriString(qs[q]));
+                }
+
+                if (encodedQuery.Length > 0)
+                {
+                    encodedQuery = encodedQuery.Remove(encodedQuery.Length - 1);
+                }
+
+                return WebUtility.UrlDecode(pathWithoutQs) + encodedQuery;
             }
 
             return WebUtility.UrlDecode(path);
